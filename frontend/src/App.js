@@ -23,6 +23,7 @@ import CertificationsPage     from './pages/CertificationsPage';
 import MaintenanceLogsPage    from './pages/MaintenanceLogsPage';
 import AlarmsPage             from './pages/AlarmsPage';
 import AuditLogPage           from './pages/AuditLogPage';
+import PackQuarantineReviewPage from './pages/PackQuarantineReviewPage';
 
 // 16 AI pages
 import AIDegradationForecastPage from './pages/AIDegradationForecastPage';
@@ -42,6 +43,24 @@ import AICapacityFadeExplainPage from './pages/AICapacityFadeExplainPage';
 import AIReplacementTimelinePage from './pages/AIReplacementTimelinePage';
 import AIPpaRevenueForecastPage  from './pages/AIPpaRevenueForecastPage';
 
+// Apply pass 7 — new AI pages
+import AIEndOfLifeClassifyPage     from './pages/AIEndOfLifeClassifyPage';
+import AISecondLifeSuitabilityPage from './pages/AISecondLifeSuitabilityPage';
+import AIThermalAnomalyDetectPage  from './pages/AIThermalAnomalyDetectPage';
+import AIRecyclingStreamRoutePage  from './pages/AIRecyclingStreamRoutePage';
+import AISocPredictPage            from './pages/AISocPredictPage';
+
+// Apply pass 7 — new CRUD / domain pages
+import CustodyEventsPage       from './pages/CustodyEventsPage';
+import CoaRecordsPage          from './pages/CoaRecordsPage';
+import PpaSchedulesPage        from './pages/PpaSchedulesPage';
+import BatteryPassportsPage    from './pages/BatteryPassportsPage';
+import ComplianceRecordsPage   from './pages/ComplianceRecordsPage';
+import LcaEntriesPage          from './pages/LcaEntriesPage';
+import EscalationRulesPage     from './pages/EscalationRulesPage';
+import WarrantyWorkflowPage    from './pages/WarrantyWorkflowPage';
+import MarketplaceListingsPage from './pages/MarketplaceListingsPage';
+
 // Admin
 import WebhooksPage from './pages/WebhooksPage';
 
@@ -52,6 +71,9 @@ import LoginPage from './pages/LoginPage';
 import { getToken } from './services/api';
 
 import './App.css';
+
+import CodexCustomVizFeature from './pages/CodexCustomVizFeature';
+import CodexOperationsFeature from './pages/CodexOperationsFeature';
 
 function RequireAuth({ children }) {
   const location = useLocation();
@@ -69,6 +91,9 @@ function ShellRoutes() {
         <Topbar />
         <div style={{ padding: '24px 32px' }}>
           <Routes>
+        <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
+        <Route path="/codex/operations" element={<CodexOperationsFeature />} />
+
             <Route path="/" element={<Dashboard />} />
 
             <Route path="/battery-packs"       element={<BatteryPacksPage />} />
@@ -88,6 +113,7 @@ function ShellRoutes() {
             <Route path="/certifications"      element={<CertificationsPage />} />
             <Route path="/maintenance-logs"    element={<MaintenanceLogsPage />} />
             <Route path="/alarms"              element={<AlarmsPage />} />
+            <Route path="/pack-quarantine-review" element={<PackQuarantineReviewPage />} />
             <Route path="/audit-log"           element={<AuditLogPage />} />
 
             <Route path="/ai/degradation-forecast"  element={<AIDegradationForecastPage />} />
@@ -106,6 +132,22 @@ function ShellRoutes() {
             <Route path="/ai/capacity-fade-explain" element={<AICapacityFadeExplainPage />} />
             <Route path="/ai/replacement-timeline"  element={<AIReplacementTimelinePage />} />
             <Route path="/ai/ppa-revenue-forecast"  element={<AIPpaRevenueForecastPage />} />
+
+            <Route path="/ai/end-of-life-classify"     element={<AIEndOfLifeClassifyPage />} />
+            <Route path="/ai/second-life-suitability"  element={<AISecondLifeSuitabilityPage />} />
+            <Route path="/ai/thermal-anomaly-detect"   element={<AIThermalAnomalyDetectPage />} />
+            <Route path="/ai/recycling-stream-route"   element={<AIRecyclingStreamRoutePage />} />
+            <Route path="/ai/soc-predict"              element={<AISocPredictPage />} />
+
+            <Route path="/custody-events"       element={<CustodyEventsPage />} />
+            <Route path="/coa-records"          element={<CoaRecordsPage />} />
+            <Route path="/ppa-schedules"        element={<PpaSchedulesPage />} />
+            <Route path="/battery-passports"    element={<BatteryPassportsPage />} />
+            <Route path="/compliance-records"   element={<ComplianceRecordsPage />} />
+            <Route path="/lca-entries"          element={<LcaEntriesPage />} />
+            <Route path="/escalation-rules"     element={<EscalationRulesPage />} />
+            <Route path="/warranty-workflow"    element={<WarrantyWorkflowPage />} />
+            <Route path="/marketplace-listings" element={<MarketplaceListingsPage />} />
 
             <Route path="/webhooks" element={<WebhooksPage />} />
 

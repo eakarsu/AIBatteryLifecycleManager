@@ -459,6 +459,112 @@ async function ppaRevenueForecast(site, ppa = {}) {
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', monthly_revenue: [] });
 }
 
+// ──────────────────────────────────────────────────────────────
+// 17. End-of-life classifier — retire vs second-life vs recycle
+// ──────────────────────────────────────────────────────────────
+async function endOfLifeClassify(pack) {
+  const sys = `${SYSTEM_PROMPT} Classify a pack's end-of-life disposition. Return strict JSON:
+{
+  "pack_id": string,
+  "disposition": "continue_service"|"retire_to_second_life"|"recycle"|"hold_for_assessment",
+  "confidence_pct": number,
+  "rationale": string,
+  "key_indicators": [{ "indicator": string, "value": string, "weight_pct": number }],
+  "next_steps": [string],
+  "summary": string
+}`;
+  const usr = `Pack:\n${JSON.stringify(pack, null, 2)}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', key_indicators: [] });
+}
+
+// ──────────────────────────────────────────────────────────────
+// 18. Second-life suitability recommender — match to application
+// ──────────────────────────────────────────────────────────────
+async function secondLifeSuitability(unit) {
+  const sys = `${SYSTEM_PROMPT} Score second-life suitability across candidate applications. Return strict JSON:
+{
+  "unit_id": string,
+  "soh_pct": number,
+  "application_scores": [{
+    "application": "stationary_bess"|"telecom_backup"|"microgrid"|"ev_charger_buffer"|"residential"|"agricultural",
+    "score_pct": number,
+    "fit_rationale": string,
+    "constraints": [string]
+  }],
+  "top_match": string,
+  "go_no_go": "go"|"caution"|"divert_to_recycle",
+  "summary": string
+}`;
+  const usr = `Unit:\n${JSON.stringify(unit, null, 2)}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', application_scores: [] });
+}
+
+// ──────────────────────────────────────────────────────────────
+// 19. Thermal anomaly detector — detection on telemetry window
+// ──────────────────────────────────────────────────────────────
+async function thermalAnomalyDetect(windowContext) {
+  const sys = `${SYSTEM_PROMPT} Detect thermal anomalies in a streaming telemetry window. Return strict JSON:
+{
+  "window_summary": string,
+  "anomalies": [{
+    "cell_id": string,
+    "kind": "hot_spot"|"rapid_rise"|"sustained_delta"|"sensor_failure",
+    "severity": "low"|"medium"|"high"|"critical",
+    "evidence": string,
+    "first_seen_minutes_ago": number
+  }],
+  "anomaly_count": number,
+  "noise_floor_breached": boolean,
+  "recommended_action": string,
+  "summary": string
+}`;
+  const usr = `Window context:\n${JSON.stringify(windowContext, null, 2)}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', anomalies: [] });
+}
+
+// ──────────────────────────────────────────────────────────────
+// 20. Recycling-stream router — chemistry-aware process pick
+// ──────────────────────────────────────────────────────────────
+async function recyclingStreamRoute(pack) {
+  const sys = `${SYSTEM_PROMPT} Route a retired pack to the optimal recycling process given its chemistry. Return strict JSON:
+{
+  "pack_id": string,
+  "chemistry": string,
+  "recommended_stream": "hydrometallurgical"|"pyrometallurgical"|"direct_recycling"|"mechanical_pretreatment",
+  "rationale": string,
+  "alternative_streams": [{ "stream": string, "rationale": string }],
+  "expected_recovery_pct": [{ "metal": string, "pct": number }],
+  "environmental_score_pct": number,
+  "summary": string
+}`;
+  const usr = `Pack:\n${JSON.stringify(pack, null, 2)}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', alternative_streams: [] });
+}
+
+// ──────────────────────────────────────────────────────────────
+// 21. SoC predictor — short-horizon operational SoC forecast
+// ──────────────────────────────────────────────────────────────
+async function socPredict(packContext) {
+  const sys = `${SYSTEM_PROMPT} Predict short-horizon state-of-charge for operational dispatch (distinct from SoH). Return strict JSON:
+{
+  "pack_id": string,
+  "current_soc_pct": number,
+  "horizon_minutes": number,
+  "projection": [{ "minutes_from_now": number, "projected_soc_pct": number, "action": string }],
+  "expected_min_soc_pct": number,
+  "expected_max_soc_pct": number,
+  "confidence_pct": number,
+  "summary": string
+}`;
+  const usr = `Pack context:\n${JSON.stringify(packContext, null, 2)}`;
+  const r = await callOpenRouter(sys, usr);
+  return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', projection: [] });
+}
+
 module.exports = {
   callOpenRouter,
   safeJsonParse,
@@ -478,4 +584,9 @@ module.exports = {
   capacityFadeExplain,
   replacementTimeline,
   ppaRevenueForecast,
+  endOfLifeClassify,
+  secondLifeSuitability,
+  thermalAnomalyDetect,
+  recyclingStreamRoute,
+  socPredict,
 };

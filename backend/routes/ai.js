@@ -196,6 +196,71 @@ const SAMPLES = {
     { label: 'EVgo Sacramento DCFC buffer',
       values: { site_summary: 'Site BP-S-051 Sacramento CA EVgo hub: 2 MWh LTO buffer at 350 kW fast-charge station.', ppa_summary: 'Behind-the-meter demand-charge avoidance + EV-session arbitrage. No formal PPA.' } },
   ],
+
+  'end-of-life-classify': [
+    { label: 'NMC EV pack 68% SoH, knee-point passed',
+      values: { pack_summary: 'Pack BP-2024-088: NMC 60 kWh, SoH 68%, 2400 cycles, knee-point past. Customer EV out-of-warranty. Module M3 flagged twice for high impedance.' } },
+    { label: 'LFP grid pack 82% SoH, still healthy',
+      values: { pack_summary: 'Pack BP-2026-021: LFP 400 kWh, SoH 82%, 3400 cycles, no anomalies, 4-hour duty.' } },
+    { label: 'Damaged transit unit, SoH unknown',
+      values: { pack_summary: 'Pack BP-2026-051: arrived crushed, BMS unresponsive. Insurance claim filed.' } },
+    { label: 'Home NCA 60% SoH, 12-year-old',
+      values: { pack_summary: 'Pack BP-2014-005: NCA 20 kWh wall unit, 12 years calendar, SoH 60%. Customer requesting replacement.' } },
+    { label: 'Bus LFP 58% SoH, 5400 cycles',
+      values: { pack_summary: 'Pack BP-2020-014: LFP 250 kWh, transit bus, SoH 58%, 5400 cycles, chassis vibration history.' } },
+  ],
+
+  'second-life-suitability': [
+    { label: 'Ex-EV NMC 72% SoH — home market',
+      values: { unit_summary: 'Unit SL-2026-009: NMC, 60 kWh nameplate, SoH 72%, 1900 cycles, BMS healthy.' } },
+    { label: 'Ex-bus LFP 65% SoH — telecom?',
+      values: { unit_summary: 'Unit SL-2026-014: LFP, 250 kWh, SoH 65%, 4200 cycles, heavy vibration history.' } },
+    { label: 'Ex-fleet NMC 78% SoH — microgrid Kenya',
+      values: { unit_summary: 'Unit SL-2026-022: NMC622, 75 kWh, SoH 78%, 1100 cycles, off-contract.' } },
+    { label: 'Grid pack 60% SoH — borderline',
+      values: { unit_summary: 'Unit SL-2026-031: LFP 200 kWh, SoH 60%, 5500 cycles, cell imbalance.' } },
+    { label: 'Ride-share NCA 81% SoH — DCFC buffer',
+      values: { unit_summary: 'Unit SL-2026-040: NCA, 85 kWh, SoH 81%, 1600 cycles, 200k miles.' } },
+  ],
+
+  'thermal-anomaly-detect': [
+    { label: '5-min window — single hot cell',
+      values: { window_summary: 'Pack BP-2026-014, 5-minute telemetry window: 14 cells, avg 38°C, cell 7 at 47°C (+9°C delta), rising 0.6°C/min. Ambient 32°C, fan at 100%.' } },
+    { label: '15-min window — sensor failure suspect',
+      values: { window_summary: 'Pack BP-2026-029, 15-minute window: cell 3 reading -40°C (impossible), siblings normal 28-32°C. Likely sensor.' } },
+    { label: 'Sustained delta — module C',
+      values: { window_summary: 'Pack BP-2026-021, 1-hour window: Module C cells consistently +6°C above modules A/B/D. Coolant flow flagged low.' } },
+    { label: '2-min window — DCFC burst',
+      values: { window_summary: 'Pack BP-2026-007 mid-DC-fast-charge, 2-minute window: cells 38-44°C, no outliers, ambient 28°C, normal profile.' } },
+    { label: '10-min window — rapid rise after fan loss',
+      values: { window_summary: 'Pack BP-2026-029 outdoor BESS: fan failed 8 min ago, all cells climbing 1°C every 90s, currently 49-58°C.' } },
+  ],
+
+  'recycling-stream-route': [
+    { label: 'NMC EV pack — hydromet candidate',
+      values: { pack_summary: 'Retired pack BP-2024-088: NMC811, 60 kWh, 380 kg, SoH 38%. Contains valuable Co and Ni. Customer-returned, intact.' } },
+    { label: 'LFP grid pack — direct or hydromet?',
+      values: { pack_summary: 'Retired pack BP-2024-031: LFP 280Ah cells, 200 kWh, 2400 kg, SoH 42%. Low Co/Ni value, Li and Fe-phosphate recovery focus.' } },
+    { label: 'NCA premium recovery',
+      values: { pack_summary: 'Retired pack BP-2023-047: NCA, 85 kWh, 540 kg, collision damage. Premium Ni/Co content.' } },
+    { label: 'LTO buffer scrap',
+      values: { pack_summary: 'Retired pack BP-2022-031: LTO, 2 MWh, 9200 kg. Titanate cells, very low cobalt, specialty stream.' } },
+    { label: 'Mixed R&D cell lot',
+      values: { pack_summary: 'R&D scrap lot: 320 prismatic LFP cells, mixed states, ~480 kg total. Will need mechanical pretreatment first.' } },
+  ],
+
+  'soc-predict': [
+    { label: '4-hr LFP idle — overnight float',
+      values: { context_summary: 'Pack BP-2026-021: LFP 400 kWh, current SoC 78%, idle overnight. Site holding for 06:00 dispatch. Ambient 18°C.', horizon_minutes: 360 } },
+    { label: 'EV DCFC mid-session — 30 min',
+      values: { context_summary: 'Pack BP-2026-007: NMC 60 kWh, charging at 150 kW DC, current SoC 42%, taper expected past 80%.', horizon_minutes: 30 } },
+    { label: 'BESS scheduled discharge — 4 hr',
+      values: { context_summary: 'Pack BP-2026-021: LFP 400 kWh, SoC 92%, beginning 4-hr discharge into CAISO peak at 100 kW.', horizon_minutes: 240 } },
+    { label: 'FCAS regulation — 1 hr',
+      values: { context_summary: 'Pack BP-2026-044: 3 MWh LFP, currently SoC 55%, providing raise-6-sec FCAS, expected net energy flat.', horizon_minutes: 60 } },
+    { label: 'Home self-consumption — 12 hr',
+      values: { context_summary: 'Pack BP-2026-005: 20 kWh NCA home unit, SoC 88%, sunset in 4 hr, household evening load ~3 kWh.', horizon_minutes: 720 } },
+  ],
 };
 
 // GET /api/ai/samples?feature=<verb>
@@ -438,6 +503,61 @@ router.post('/ppa-revenue-forecast', async (req, res) => {
     if (!site_summary) return res.status(400).json({ error: 'site_summary is required' });
     const result = await ai.ppaRevenueForecast({ site_summary }, { ppa_summary });
     await record('ppa-revenue-forecast', { site_summary, ppa_summary }, result);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────── 17. end-of-life-classify ───────────
+router.post('/end-of-life-classify', async (req, res) => {
+  try {
+    const { pack_summary } = req.body || {};
+    if (!pack_summary) return res.status(400).json({ error: 'pack_summary is required' });
+    const result = await ai.endOfLifeClassify({ pack_summary });
+    await record('end-of-life-classify', { pack_summary }, result);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────── 18. second-life-suitability ───────────
+router.post('/second-life-suitability', async (req, res) => {
+  try {
+    const { unit_summary } = req.body || {};
+    if (!unit_summary) return res.status(400).json({ error: 'unit_summary is required' });
+    const result = await ai.secondLifeSuitability({ unit_summary });
+    await record('second-life-suitability', { unit_summary }, result);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────── 19. thermal-anomaly-detect ───────────
+router.post('/thermal-anomaly-detect', async (req, res) => {
+  try {
+    const { window_summary } = req.body || {};
+    if (!window_summary) return res.status(400).json({ error: 'window_summary is required' });
+    const result = await ai.thermalAnomalyDetect({ window_summary });
+    await record('thermal-anomaly-detect', { window_summary }, result);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────── 20. recycling-stream-route ───────────
+router.post('/recycling-stream-route', async (req, res) => {
+  try {
+    const { pack_summary } = req.body || {};
+    if (!pack_summary) return res.status(400).json({ error: 'pack_summary is required' });
+    const result = await ai.recyclingStreamRoute({ pack_summary });
+    await record('recycling-stream-route', { pack_summary }, result);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────── 21. soc-predict ───────────
+router.post('/soc-predict', async (req, res) => {
+  try {
+    const { context_summary, horizon_minutes } = req.body || {};
+    if (!context_summary) return res.status(400).json({ error: 'context_summary is required' });
+    const result = await ai.socPredict({ context_summary, horizon_minutes: horizon_minutes ?? 60 });
+    await record('soc-predict', { context_summary, horizon_minutes }, result);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

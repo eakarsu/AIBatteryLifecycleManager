@@ -69,6 +69,19 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 
 // Custom analytics views (degradation curves overlay, cell voltage heatmap)
 app.use('/api/custom-views', require('./routes/customViews'));
+app.use('/api/pack-quarantine-review', require('./routes/packQuarantineReview'));
+
+// Apply pass 7 — full backlog implementation (MECHANICAL + NEEDS-PRODUCT-DECISION + NEEDS-CREDS stubs).
+app.use('/api/custody-events',         require('./routes/custodyEvents'));
+app.use('/api/coa-records',            require('./routes/coaRecords'));
+app.use('/api/ppa-schedules',          require('./routes/ppaSchedules'));
+app.use('/api/battery-passports',      require('./routes/batteryPassports'));
+app.use('/api/compliance-records',     require('./routes/complianceRecords'));
+app.use('/api/lca-entries',            require('./routes/lcaEntries'));
+app.use('/api/escalation-rules',       require('./routes/escalationRules'));
+app.use('/api/warranty-workflow',      require('./routes/warrantyWorkflow'));
+app.use('/api/marketplace-listings',   require('./routes/marketplaceListings'));
+app.use('/api/supplier-integrations',  require('./routes/supplierIntegrations'));
 
 app.listen(PORT, () => {
   console.log(`\nAI Battery Lifecycle Manager API running on http://localhost:${PORT}\n`);

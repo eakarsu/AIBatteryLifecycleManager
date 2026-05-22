@@ -21,6 +21,7 @@ const OPERATIONS = [
   { to: '/dispatch-schedules',  label: 'Dispatch Schedules' },
   { to: '/alarms',              label: 'Alarms' },
   { to: '/maintenance-logs',    label: 'Maintenance Logs' },
+  { to: '/pack-quarantine-review', label: 'Pack Quarantine Review' },
 ];
 
 const WARRANTY = [
@@ -30,8 +31,23 @@ const WARRANTY = [
 ];
 
 const RECYCLING = [
-  { to: '/second-life-units',   label: 'Second-Life Units' },
-  { to: '/recycling-orders',    label: 'Recycling Orders' },
+  { to: '/second-life-units',     label: 'Second-Life Units' },
+  { to: '/recycling-orders',      label: 'Recycling Orders' },
+  { to: '/marketplace-listings',  label: 'Marketplace Listings' },
+];
+
+const LIFECYCLE = [
+  { to: '/battery-passports',  label: 'Battery Passports' },
+  { to: '/coa-records',        label: 'CoA Records' },
+  { to: '/custody-events',     label: 'Chain of Custody' },
+  { to: '/lca-entries',        label: 'LCA Accounting' },
+  { to: '/compliance-records', label: 'Compliance' },
+];
+
+const COMMERCIAL = [
+  { to: '/ppa-schedules',      label: 'PPA / Tariffs' },
+  { to: '/warranty-workflow',  label: 'Warranty Workflow' },
+  { to: '/escalation-rules',   label: 'Escalation Rules' },
 ];
 
 const AI_FORECASTING = [
@@ -40,15 +56,20 @@ const AI_FORECASTING = [
   { to: '/ai/capacity-fade-explain', label: 'AI · Capacity Fade Explain' },
   { to: '/ai/replacement-timeline',  label: 'AI · Replacement Timeline' },
   { to: '/ai/ppa-revenue-forecast',  label: 'AI · PPA Revenue Forecast' },
+  { to: '/ai/soc-predict',           label: 'AI · SoC Predictor' },
+  { to: '/ai/end-of-life-classify',  label: 'AI · End-of-Life Classifier' },
 ];
 
 const AI_MAINTENANCE = [
-  { to: '/ai/thermal-risk',          label: 'AI · Thermal Risk' },
-  { to: '/ai/cell-balance-suggest',  label: 'AI · Cell Balance Suggest' },
-  { to: '/ai/anomaly-cluster',       label: 'AI · Anomaly Cluster' },
-  { to: '/ai/dispatch-optimize',     label: 'AI · Dispatch Optimize' },
-  { to: '/ai/second-life-route',     label: 'AI · Second-Life Route' },
-  { to: '/ai/recycling-quote',       label: 'AI · Recycling Quote' },
+  { to: '/ai/thermal-risk',             label: 'AI · Thermal Risk' },
+  { to: '/ai/thermal-anomaly-detect',   label: 'AI · Thermal Anomaly Detector' },
+  { to: '/ai/cell-balance-suggest',     label: 'AI · Cell Balance Suggest' },
+  { to: '/ai/anomaly-cluster',          label: 'AI · Anomaly Cluster' },
+  { to: '/ai/dispatch-optimize',        label: 'AI · Dispatch Optimize' },
+  { to: '/ai/second-life-route',        label: 'AI · Second-Life Route' },
+  { to: '/ai/second-life-suitability',  label: 'AI · Second-Life Suitability' },
+  { to: '/ai/recycling-quote',          label: 'AI · Recycling Quote' },
+  { to: '/ai/recycling-stream-route',   label: 'AI · Recycling Stream Router' },
 ];
 
 const AI_REPORTING = [
@@ -92,6 +113,16 @@ export default function Sidebar() {
 
       <div className="sidebar-group-label">Recycling</div>
       {RECYCLING.map((l) => (
+        <NavLink key={l.to} to={l.to}>{l.label}</NavLink>
+      ))}
+
+      <div className="sidebar-group-label">Lifecycle</div>
+      {LIFECYCLE.map((l) => (
+        <NavLink key={l.to} to={l.to}>{l.label}</NavLink>
+      ))}
+
+      <div className="sidebar-group-label">Commercial</div>
+      {COMMERCIAL.map((l) => (
         <NavLink key={l.to} to={l.to}>{l.label}</NavLink>
       ))}
 

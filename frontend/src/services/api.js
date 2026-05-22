@@ -124,6 +124,32 @@ export const certificationsApi     = crud('certifications');
 export const maintenanceLogsApi    = crud('maintenance-logs');
 export const alarmsApi             = crud('alarms');
 export const auditLogApi           = crud('audit-log');
+export const packQuarantineReviewApi = crud('pack-quarantine-review');
+
+// Apply pass 7 — additional CRUD entities
+export const custodyEventsApi       = crud('custody-events');
+export const coaRecordsApi          = crud('coa-records');
+export const ppaSchedulesApi        = crud('ppa-schedules');
+export const batteryPassportsApi    = crud('battery-passports');
+export const complianceRecordsApi   = crud('compliance-records');
+export const lcaEntriesApi          = crud('lca-entries');
+export const escalationRulesApi     = crud('escalation-rules');
+export const warrantyWorkflowApi    = crud('warranty-workflow');
+export const marketplaceListingsApi = crud('marketplace-listings');
+
+// Compliance scoring (rule-based, no AI call)
+export const getComplianceScore = (assetId) => {
+  const qs = new URLSearchParams(assetId ? { asset_id: assetId } : {}).toString();
+  return request(`/compliance-records/score${qs ? `?${qs}` : ''}`);
+};
+
+// Warranty workflow state-machine helpers
+export const getWarrantyStateMachine = () => request('/warranty-workflow/state-machine');
+export const transitionWarrantyWorkflow = (id, to_state, notes) =>
+  request(`/warranty-workflow/${id}/transition`, { method: 'POST', body: JSON.stringify({ to_state, notes }) });
+
+// Battery passport public lookup (still behind auth — public surface stub)
+export const getBatteryPassportPublic = (slug) => request(`/battery-passports/public/${encodeURIComponent(slug)}`);
 
 // Dashboard
 export const getDashboardStats = () => request('/dashboard');
@@ -150,6 +176,13 @@ export const aiAnomalyCluster      = (body) => request('/ai/anomaly-cluster',   
 export const aiCapacityFadeExplain = (body) => request('/ai/capacity-fade-explain',{ method: 'POST', body: JSON.stringify(body || {}) });
 export const aiReplacementTimeline = (body) => request('/ai/replacement-timeline', { method: 'POST', body: JSON.stringify(body || {}) });
 export const aiPpaRevenueForecast  = (body) => request('/ai/ppa-revenue-forecast', { method: 'POST', body: JSON.stringify(body || {}) });
+
+// Apply pass 7 — additional AI verbs
+export const aiEndOfLifeClassify     = (body) => request('/ai/end-of-life-classify',     { method: 'POST', body: JSON.stringify(body || {}) });
+export const aiSecondLifeSuitability = (body) => request('/ai/second-life-suitability', { method: 'POST', body: JSON.stringify(body || {}) });
+export const aiThermalAnomalyDetect  = (body) => request('/ai/thermal-anomaly-detect',  { method: 'POST', body: JSON.stringify(body || {}) });
+export const aiRecyclingStreamRoute  = (body) => request('/ai/recycling-stream-route',  { method: 'POST', body: JSON.stringify(body || {}) });
+export const aiSocPredict            = (body) => request('/ai/soc-predict',             { method: 'POST', body: JSON.stringify(body || {}) });
 
 // AI history
 export const getAIHistory = (feature, limit = 25) => {
