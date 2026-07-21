@@ -3,30 +3,17 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET, authenticateToken, requireAdmin } = require('../middleware/auth');
 const pool = require('../config/database');
-
-// Fallback demo admin used when the users table is unavailable
-// (e.g. before the v2 migration is applied). Never overwritten anywhere.
-const DEMO_USER = {
-  id: 1,
-  email: 'admin@batterylife.io',
-  password: 'admin123',
-  name: 'Admin',
-  role: 'admin',
-};
+const { verifyPassword } = require('../lib/passwords');
 
 async function findDbUser(email, password) {
-  try {
-    const r = await pool.query(
-      'SELECT id, email, password, name, role FROM users WHERE email = $1 LIMIT 1',
-      [email]
-    );
-    if (!r.rows.length) return null;
-    const u = r.rows[0];
-    if (u.password !== password) return null;
-    return { id: u.id, email: u.email, name: u.name, role: u.role };
-  } catch (e) {
-    return null;
-  }
+  const r = await pool.query(
+    'SELECT id, email, password, name, role FROM users WHERE email = $1 LIMIT 1',
+    [String(email).trim().toLowerCase()]
+  );
+  if (!r.rows.length) return null;
+  const u = r.rows[0];
+  if (!verifyPassword(password, u.password)) return null;
+  return { id: u.id, email: u.email, name: u.name, role: u.role };
 }
 
 // POST /api/auth/login
@@ -37,18 +24,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'email and password are required' });
     }
 
-    let user = await findDbUser(email, password);
-
-    if (!user) {
-      if (email === DEMO_USER.email && password === DEMO_USER.password) {
-        user = {
-          id: DEMO_USER.id,
-          email: DEMO_USER.email,
-          name: DEMO_USER.name,
-          role: DEMO_USER.role,
-        };
-      }
-    }
+    const user = await findDbUser(email, password);
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });

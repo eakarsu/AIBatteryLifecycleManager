@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const { hashPassword } = require('../lib/passwords');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const pool = new Pool({
@@ -8,10 +9,14 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'battery_lifecycle',
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
+  password: process.env.DB_PASSWORD,
 });
 
 async function run() {
+  if (process.env.RESET_DATABASE !== '1' || process.env.SEED_DEMO_DATA !== '1') {
+    throw new Error('Refusing destructive seed: set RESET_DATABASE=1 and SEED_DEMO_DATA=1 explicitly');
+  }
+  if (!process.env.SEED_DEMO_PASSWORD) throw new Error('SEED_DEMO_PASSWORD is required');
   const client = await pool.connect();
   try {
     console.log('[seed] resetting tables...');
@@ -278,9 +283,9 @@ async function run() {
     // ─────────────────────────────────────────────
     console.log('[seed] inserting users...');
     const users = [
-      ['admin@batterylife.io',  'admin123',  'Admin',    'admin'],
-      ['ops@batterylife.io',    'ops123',    'Ops Lead', 'ops'],
-      ['viewer@batterylife.io', 'viewer123', 'Viewer',   'viewer'],
+      ['admin@batterylife.invalid',  hashPassword(process.env.SEED_DEMO_PASSWORD), 'Admin',    'admin'],
+      ['ops@batterylife.invalid',    hashPassword(process.env.SEED_DEMO_PASSWORD), 'Ops Lead', 'ops'],
+      ['viewer@batterylife.invalid', hashPassword(process.env.SEED_DEMO_PASSWORD), 'Viewer',   'viewer'],
     ];
     for (const u of users) {
       await client.query(
