@@ -32,6 +32,7 @@ app.get('/api/health', (req, res) => {
 
 // Auth (public)
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/runtime-ai', require('./routes/runtimeAi'));
 
 // Everything below this line requires a Bearer token.
 app.use('/api', authenticateToken);

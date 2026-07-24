@@ -6,6 +6,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node scripts/migrate.js",
+    "create-admin": "node scripts/provision-admin.js",
     "test:unit": "node --test tests/*.test.js"
   },
   "dependencies": {
