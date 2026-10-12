@@ -12,7 +12,7 @@ export default function AICapacityFadeExplainPage() {
         { key: 'pack_summary',    label: 'Pack Summary',    type: 'textarea', placeholder: 'Pack, chemistry, current SoH, vendor curve comparison.' },
         { key: 'history_summary', label: 'History Summary', type: 'textarea', placeholder: 'Anomalies, near-misses, environment, duty.' },
       ]}
-      run={(v) => aiCapacityFadeExplain({ pack_summary: v.pack_summary, history_summary: v.history_summary })}
+      run={(v, requestOptions) => aiCapacityFadeExplain({ pack_summary: v.pack_summary, history_summary: v.history_summary }, requestOptions)}
     />
   );
 }

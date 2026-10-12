@@ -11,7 +11,7 @@ export default function AICustomerSohReportPage() {
       inputs={[
         { key: 'customer_summary', label: 'Customer Summary', type: 'textarea', placeholder: 'Customer, pack count, chemistry mix, review cadence.' },
       ]}
-      run={(v) => aiCustomerSohReport({ customer_summary: v.customer_summary })}
+      run={(v, requestOptions) => aiCustomerSohReport({ customer_summary: v.customer_summary }, requestOptions)}
     />
   );
 }

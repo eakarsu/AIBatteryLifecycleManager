@@ -8,8 +8,8 @@ export default function AISohTrendPage() {
       title="AI · SoH Trend"
       feature="soh-trend"
       subtitle="Fleet-wide state-of-health trend with cohort breakdown and outliers."
-      inputs={[]}
-      run={() => aiSohTrend({})}
+      inputs={[{ key: 'review_focus', label: 'Review focus (optional)', type: 'textarea', placeholder: 'Describe the fleet trend question to prioritize.' }]}
+      run={(values, requestOptions) => aiSohTrend(values, requestOptions)}
     />
   );
 }

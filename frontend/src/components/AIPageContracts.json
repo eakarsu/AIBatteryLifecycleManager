@@ -1,0 +1,47 @@
+{
+  "warranty-draft": [
+    "claim_summary"
+  ],
+  "second-life-route": [
+    "unit_summary"
+  ],
+  "dispatch-optimize": [
+    "pack_summary"
+  ],
+  "thermal-risk": [
+    "context_summary"
+  ],
+  "cell-balance-suggest": [
+    "cells_summary"
+  ],
+  "recycling-quote": [
+    "pack_summary"
+  ],
+  "vendor-quality-score": [
+    "vendor_summary"
+  ],
+  "customer-soh-report": [
+    "customer_summary"
+  ],
+  "capacity-fade-explain": [
+    "pack_summary"
+  ],
+  "ppa-revenue-forecast": [
+    "site_summary"
+  ],
+  "end-of-life-classify": [
+    "pack_summary"
+  ],
+  "second-life-suitability": [
+    "unit_summary"
+  ],
+  "thermal-anomaly-detect": [
+    "window_summary"
+  ],
+  "recycling-stream-route": [
+    "pack_summary"
+  ],
+  "soc-predict": [
+    "context_summary"
+  ]
+}

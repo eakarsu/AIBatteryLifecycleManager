@@ -8,8 +8,8 @@ export default function AIFleetHealthPage() {
       title="AI · Fleet Health"
       feature="fleet-health"
       subtitle="Comprehensive fleet diagnostic with critical packs, watch list and recommendations."
-      inputs={[]}
-      run={() => aiFleetHealth({})}
+      inputs={[{ key: 'review_focus', label: 'Review focus (optional)', type: 'textarea', placeholder: 'Describe the fleet health decision to support.' }]}
+      run={(values, requestOptions) => aiFleetHealth(values, requestOptions)}
     />
   );
 }

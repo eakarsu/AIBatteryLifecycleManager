@@ -11,7 +11,7 @@ export default function AICellBalanceSuggestPage() {
       inputs={[
         { key: 'cells_summary', label: 'Cells Summary', type: 'textarea', placeholder: 'Module, chemistry, voltage spread, outliers, last balance.' },
       ]}
-      run={(v) => aiCellBalanceSuggest({ cells_summary: v.cells_summary })}
+      run={(v, requestOptions) => aiCellBalanceSuggest({ cells_summary: v.cells_summary }, requestOptions)}
     />
   );
 }

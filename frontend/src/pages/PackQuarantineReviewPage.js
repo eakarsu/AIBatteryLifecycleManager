@@ -13,8 +13,8 @@ export default function PackQuarantineReviewPage() {
       fields={[
         { key: 'pack_id', label: 'Pack ID' },
         { key: 'quarantine_reason', label: 'Reason', type: 'textarea' },
-        { key: 'risk_level', label: 'Risk', type: 'select', options: ['low', 'medium', 'high', 'critical'] },
-        { key: 'hold_status', label: 'Hold Status', type: 'select', options: ['quarantined', 'under_review', 'released', 'scrap'] },
+        { key: 'risk_level', label: 'Risk', type: 'select', options: ['unassessed', 'low', 'medium', 'high', 'critical'] },
+        { key: 'hold_status', label: 'Hold Status', type: 'select', options: ['planning_draft', 'quarantined', 'under_review', 'released', 'scrap'] },
         { key: 'reviewer', label: 'Reviewer' },
         { key: 'recommended_action', label: 'Recommended Action', type: 'textarea' },
         { key: 'opened_at', label: 'Opened At', type: 'datetime-local' },

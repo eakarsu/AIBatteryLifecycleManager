@@ -12,7 +12,7 @@ export default function AIRecyclingQuotePage() {
         { key: 'pack_summary',   label: 'Pack Summary',   type: 'textarea', placeholder: 'Chemistry, mass, SoH, intactness.' },
         { key: 'vendor_summary', label: 'Vendor Summary', type: 'textarea', placeholder: 'Recycler, process, current metal pricing.' },
       ]}
-      run={(v) => aiRecyclingQuote({ pack_summary: v.pack_summary, vendor_summary: v.vendor_summary })}
+      run={(v, requestOptions) => aiRecyclingQuote({ pack_summary: v.pack_summary, vendor_summary: v.vendor_summary }, requestOptions)}
     />
   );
 }

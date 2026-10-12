@@ -12,7 +12,7 @@ export default function AIDegradationForecastPage() {
         { key: 'pack_summary',   label: 'Pack Summary', type: 'textarea', placeholder: 'Chemistry, capacity, cycle count, SoH, duty profile.' },
         { key: 'horizon_cycles', label: 'Horizon (cycles)', type: 'number', defaultValue: 2000 },
       ]}
-      run={(v) => aiDegradationForecast({ pack_summary: v.pack_summary, horizon_cycles: Number(v.horizon_cycles) || 2000 })}
+      run={(v, requestOptions) => aiDegradationForecast({ pack_summary: v.pack_summary, horizon_cycles: Number(v.horizon_cycles) || 2000 }, requestOptions)}
     />
   );
 }

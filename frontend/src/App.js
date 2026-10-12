@@ -34,6 +34,7 @@ import AIDispatchOptimizePage    from './pages/AIDispatchOptimizePage';
 import AIThermalRiskPage         from './pages/AIThermalRiskPage';
 import AICellBalanceSuggestPage  from './pages/AICellBalanceSuggestPage';
 import AIExecutiveBriefPage      from './pages/AIExecutiveBriefPage';
+import LifecycleReadinessPage from './pages/LifecycleReadinessPage';
 import AIRecyclingQuotePage      from './pages/AIRecyclingQuotePage';
 import AIVendorQualityScorePage  from './pages/AIVendorQualityScorePage';
 import AICustomerSohReportPage   from './pages/AICustomerSohReportPage';
@@ -124,6 +125,7 @@ function ShellRoutes() {
             <Route path="/ai/thermal-risk"          element={<AIThermalRiskPage />} />
             <Route path="/ai/cell-balance-suggest"  element={<AICellBalanceSuggestPage />} />
             <Route path="/ai/executive-brief"       element={<AIExecutiveBriefPage />} />
+            <Route path="/ai/lifecycle-readiness" element={<LifecycleReadinessPage />} />
             <Route path="/ai/recycling-quote"       element={<AIRecyclingQuotePage />} />
             <Route path="/ai/vendor-quality-score"  element={<AIVendorQualityScorePage />} />
             <Route path="/ai/customer-soh-report"   element={<AICustomerSohReportPage />} />

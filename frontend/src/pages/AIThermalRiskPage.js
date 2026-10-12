@@ -11,7 +11,7 @@ export default function AIThermalRiskPage() {
       inputs={[
         { key: 'context_summary', label: 'Context Summary', type: 'textarea', placeholder: 'Pack, ambient, cell temps, recent dispatches, HVAC status.' },
       ]}
-      run={(v) => aiThermalRisk({ context_summary: v.context_summary })}
+      run={(v, requestOptions) => aiThermalRisk({ context_summary: v.context_summary }, requestOptions)}
     />
   );
 }

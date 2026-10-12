@@ -11,15 +11,35 @@ const SYSTEM_PROMPT =
   'You are a senior battery lifecycle engineer supporting a unified BESS + EV second-life operations platform. ' +
   'You provide rigorous, engineering-grade reasoning on state-of-health forecasting, thermal risk, warranty workflow, ' +
   'second-life routing, dispatch optimisation and recycling economics. Always return strict JSON in the exact ' +
-  'schema requested. Never wrap your JSON in markdown fences. Treat every input as a tabletop / advisory exercise.';
+  'schema requested. Never wrap your JSON in markdown fences. Treat every input as a tabletop / advisory exercise. ' +
+  'Use only supplied or explicitly persisted facts. Label missing evidence and uncertainty; never invent telemetry, tests, ' +
+  'certifications, signatures, consent, approvals, provider receipts, payments, deliveries, service completion or executed actions. ' +
+  'Every safety hold/release, warranty coverage, dispatch, maintenance, reuse, sale and recycling outcome remains a proposal ' +
+  'requiring qualified human review and the applicable evidence/approval gate.';
 
-function callOpenRouter(systemPrompt, userPrompt) {
+function abortError() {
+  const error = new Error('OpenRouter request cancelled');
+  error.name = 'AbortError';
+  return error;
+}
+
+function providerEndpoint() {
+  const configured = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+  const url = new URL(configured);
+  if (!/\/chat\/completions\/?$/.test(url.pathname)) {
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/chat/completions`;
+  }
+  return url;
+}
+
+function callOpenRouter(systemPrompt, userPrompt, { signal } = {}) {
   return new Promise((resolve, reject) => {
     const { key, model } = getOpenRouterCreds();
-    if (!key) {
-      return resolve({ error: 'OPENROUTER_API_KEY not configured' });
-    }
-    const https = require('https');
+    if (!key) return reject(new Error('OpenRouter is not configured on this host'));
+    if (signal?.aborted) return reject(abortError());
+
+    const endpoint = providerEndpoint();
+    const transport = endpoint.protocol === 'http:' ? require('http') : require('https');
     const payload = JSON.stringify({
       model,
       messages: [
@@ -29,10 +49,18 @@ function callOpenRouter(systemPrompt, userPrompt) {
       temperature: 0.6,
       max_tokens: 2000,
     });
-
-    const options = {
-      hostname: 'openrouter.ai',
-      path: '/api/v1/chat/completions',
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      fn(value);
+    };
+    const requestOptions = {
+      protocol: endpoint.protocol,
+      hostname: endpoint.hostname,
+      port: endpoint.port || undefined,
+      path: `${endpoint.pathname}${endpoint.search}`,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -42,24 +70,27 @@ function callOpenRouter(systemPrompt, userPrompt) {
         'X-Title': 'AI Battery Lifecycle Manager',
       },
     };
-
-    const req = https.request(options, (res) => {
+    const req = transport.request(requestOptions, (res) => {
       let body = '';
-      res.on('data', (chunk) => (body += chunk));
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
+        if (signal?.aborted) return finish(reject, abortError());
         try {
           const parsed = JSON.parse(body);
-          if (parsed.error) {
-            return resolve({ error: parsed.error.message || 'OpenRouter error', raw: body });
-          }
+          if (parsed.error) return finish(reject, new Error(parsed.error.message || `OpenRouter rejected the request (${res.statusCode || 'unknown status'})`));
+          if ((res.statusCode || 500) < 200 || res.statusCode >= 300) return finish(reject, new Error(`OpenRouter request failed (${res.statusCode})`));
           const content = parsed.choices?.[0]?.message?.content || '';
-          resolve(content);
-        } catch (e) {
-          resolve({ error: 'AI response parse failed', raw: body });
+          if (!content) return finish(reject, new Error('OpenRouter returned an empty response'));
+          finish(resolve, content);
+        } catch (error) {
+          finish(reject, error instanceof Error ? error : new Error('OpenRouter returned an unreadable response'));
         }
       });
     });
-    req.on('error', (e) => resolve({ error: e.message }));
+    const onAbort = () => req.destroy(abortError());
+    signal?.addEventListener('abort', onAbort, { once: true });
+    req.on('error', (error) => finish(reject, signal?.aborted ? abortError() : error));
     req.write(payload);
     req.end();
   });
@@ -98,7 +129,7 @@ function safeJsonParse(response, fallback) {
 // ──────────────────────────────────────────────────────────────
 // 1. Degradation forecast — project SoH out N cycles
 // ──────────────────────────────────────────────────────────────
-async function degradationForecast(pack, horizon = {}) {
+async function degradationForecast(pack, horizon = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Forecast battery pack capacity fade. Return strict JSON:
 {
   "pack_id": string,
@@ -111,14 +142,14 @@ async function degradationForecast(pack, horizon = {}) {
   "summary": string
 }`;
   const usr = `Pack:\n${JSON.stringify(pack, null, 2)}\n\nHorizon:\n${JSON.stringify(horizon, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', projection: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 2. SoH trend — multi-pack fleet trend
 // ──────────────────────────────────────────────────────────────
-async function sohTrend(packs = []) {
+async function sohTrend(context = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Analyse SoH trends across a fleet. Return strict JSON:
 {
   "fleet_size": number,
@@ -130,15 +161,15 @@ async function sohTrend(packs = []) {
   "cohort_analysis": [{ "chemistry": string, "avg_soh_pct": number, "sample_size": number }],
   "summary": string
 }`;
-  const usr = `Packs:\n${JSON.stringify(packs, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const usr = `Persisted fleet context:\n${JSON.stringify(context, null, 2)}`;
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', outliers: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 3. Warranty draft — generate claim draft
 // ──────────────────────────────────────────────────────────────
-async function warrantyDraft(claim) {
+async function warrantyDraft(claim, options = {}) {
   const sys = `${SYSTEM_PROMPT} Draft a warranty claim package. Return strict JSON:
 {
   "claim_id": string,
@@ -153,14 +184,14 @@ async function warrantyDraft(claim) {
   "summary": string
 }`;
   const usr = `Claim:\n${JSON.stringify(claim, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', evidence_required: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 4. Second-life route — recommend repurposing path
 // ──────────────────────────────────────────────────────────────
-async function secondLifeRoute(unit) {
+async function secondLifeRoute(unit, options = {}) {
   const sys = `${SYSTEM_PROMPT} Recommend a second-life route for a retired EV / BESS module. Return strict JSON:
 {
   "unit_id": string,
@@ -175,14 +206,14 @@ async function secondLifeRoute(unit) {
   "summary": string
 }`;
   const usr = `Unit:\n${JSON.stringify(unit, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', alternates: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 5. Dispatch optimize — optimise BESS dispatch into market
 // ──────────────────────────────────────────────────────────────
-async function dispatchOptimize(pack, market = {}) {
+async function dispatchOptimize(pack, market = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Optimise BESS dispatch into an energy market. Return strict JSON:
 {
   "pack_id": string,
@@ -195,14 +226,14 @@ async function dispatchOptimize(pack, market = {}) {
   "summary": string
 }`;
   const usr = `Pack:\n${JSON.stringify(pack, null, 2)}\n\nMarket:\n${JSON.stringify(market, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', schedule: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 6. Thermal risk — assess thermal runaway / hot-cell risk
 // ──────────────────────────────────────────────────────────────
-async function thermalRisk(packContext) {
+async function thermalRisk(packContext, options = {}) {
   const sys = `${SYSTEM_PROMPT} Assess thermal risk for a pack under given conditions. Return strict JSON:
 {
   "pack_id": string,
@@ -215,14 +246,14 @@ async function thermalRisk(packContext) {
   "summary": string
 }`;
   const usr = `Context:\n${JSON.stringify(packContext, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', hot_cells: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 7. Cell balance suggest — recommend balancing actions
 // ──────────────────────────────────────────────────────────────
-async function cellBalanceSuggest(packCells = []) {
+async function cellBalanceSuggest(packCells = [], options = {}) {
   const sys = `${SYSTEM_PROMPT} Recommend cell balancing actions. Return strict JSON:
 {
   "pack_id": string,
@@ -234,14 +265,14 @@ async function cellBalanceSuggest(packCells = []) {
   "summary": string
 }`;
   const usr = `Cells:\n${JSON.stringify(packCells, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', actions: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 8. Executive brief — operational snapshot for management
 // ──────────────────────────────────────────────────────────────
-async function executiveBrief(snapshot = {}) {
+async function executiveBrief(snapshot = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Produce a leadership brief on the battery fleet. Return strict JSON:
 {
   "headline": string,
@@ -255,14 +286,14 @@ async function executiveBrief(snapshot = {}) {
   "summary": string
 }`;
   const usr = `Operational snapshot:\n${JSON.stringify(snapshot, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response' });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 9. Recycling quote — black-mass / metal recovery value
 // ──────────────────────────────────────────────────────────────
-async function recyclingQuote(pack, vendorContext = {}) {
+async function recyclingQuote(pack, vendorContext = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Quote a recycling order for a retired pack. Return strict JSON:
 {
   "pack_id": string,
@@ -277,14 +308,14 @@ async function recyclingQuote(pack, vendorContext = {}) {
   "summary": string
 }`;
   const usr = `Pack:\n${JSON.stringify(pack, null, 2)}\n\nVendor context:\n${JSON.stringify(vendorContext, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', recovered_metals: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 10. Vendor quality score — vendor scorecard
 // ──────────────────────────────────────────────────────────────
-async function vendorQualityScore(vendorContext) {
+async function vendorQualityScore(vendorContext, options = {}) {
   const sys = `${SYSTEM_PROMPT} Score a battery vendor on fleet quality. Return strict JSON:
 {
   "vendor": string,
@@ -297,14 +328,14 @@ async function vendorQualityScore(vendorContext) {
   "summary": string
 }`;
   const usr = `Vendor context:\n${JSON.stringify(vendorContext, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', sub_scores: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 11. Customer SoH report — generate report for a customer
 // ──────────────────────────────────────────────────────────────
-async function customerSohReport(customer, packs = []) {
+async function customerSohReport(customer, packs = [], options = {}) {
   const sys = `${SYSTEM_PROMPT} Generate a customer-facing SoH report. Return strict JSON:
 {
   "customer": string,
@@ -318,14 +349,14 @@ async function customerSohReport(customer, packs = []) {
   "summary": string
 }`;
   const usr = `Customer:\n${JSON.stringify(customer, null, 2)}\n\nPacks:\n${JSON.stringify(packs, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', pack_summaries: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 12. Fleet health — comprehensive fleet diagnostic
 // ──────────────────────────────────────────────────────────────
-async function fleetHealth(snapshot = {}) {
+async function fleetHealth(snapshot = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Build a fleet-level health report. Return strict JSON:
 {
   "fleet_size": number,
@@ -338,14 +369,14 @@ async function fleetHealth(snapshot = {}) {
   "summary": string
 }`;
   const usr = `Snapshot:\n${JSON.stringify(snapshot, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', critical_packs: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 13. Anomaly cluster — group anomalies for triage
 // ──────────────────────────────────────────────────────────────
-async function anomalyCluster(alarms = []) {
+async function anomalyCluster(context = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Cluster alarms / anomalies into root causes. Return strict JSON:
 {
   "total_alarms": number,
@@ -360,15 +391,15 @@ async function anomalyCluster(alarms = []) {
   "noise_alarms": number,
   "summary": string
 }`;
-  const usr = `Alarms:\n${JSON.stringify(alarms, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const usr = `Persisted alarm context:\n${JSON.stringify(context, null, 2)}`;
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', clusters: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 14. Capacity fade explain — explain root cause of fade
 // ──────────────────────────────────────────────────────────────
-async function capacityFadeExplain(pack, history = []) {
+async function capacityFadeExplain(pack, history = [], options = {}) {
   const sys = `${SYSTEM_PROMPT} Explain capacity fade drivers for a pack. Return strict JSON:
 {
   "pack_id": string,
@@ -381,14 +412,14 @@ async function capacityFadeExplain(pack, history = []) {
   "summary": string
 }`;
   const usr = `Pack:\n${JSON.stringify(pack, null, 2)}\n\nHistory:\n${JSON.stringify(history, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', contributing_factors: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 15. Replacement timeline — when to replace what
 // ──────────────────────────────────────────────────────────────
-async function replacementTimeline(packs = []) {
+async function replacementTimeline(packs = [], options = {}) {
   const sys = `${SYSTEM_PROMPT} Build a replacement timeline for a fleet of packs. Return strict JSON:
 {
   "horizon_months": number,
@@ -405,14 +436,14 @@ async function replacementTimeline(packs = []) {
   "summary": string
 }`;
   const usr = `Packs:\n${JSON.stringify(packs, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', timeline: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 16. PPA revenue forecast — site revenue projection
 // ──────────────────────────────────────────────────────────────
-async function ppaRevenueForecast(site, ppa = {}) {
+async function ppaRevenueForecast(site, ppa = {}, options = {}) {
   const sys = `${SYSTEM_PROMPT} Forecast PPA / tolling revenue for a BESS site. Return strict JSON:
 {
   "site_id": string,
@@ -426,14 +457,14 @@ async function ppaRevenueForecast(site, ppa = {}) {
   "summary": string
 }`;
   const usr = `Site:\n${JSON.stringify(site, null, 2)}\n\nPPA terms:\n${JSON.stringify(ppa, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', monthly_revenue: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 17. End-of-life classifier — retire vs second-life vs recycle
 // ──────────────────────────────────────────────────────────────
-async function endOfLifeClassify(pack) {
+async function endOfLifeClassify(pack, options = {}) {
   const sys = `${SYSTEM_PROMPT} Classify a pack's end-of-life disposition. Return strict JSON:
 {
   "pack_id": string,
@@ -445,14 +476,14 @@ async function endOfLifeClassify(pack) {
   "summary": string
 }`;
   const usr = `Pack:\n${JSON.stringify(pack, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', key_indicators: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 18. Second-life suitability recommender — match to application
 // ──────────────────────────────────────────────────────────────
-async function secondLifeSuitability(unit) {
+async function secondLifeSuitability(unit, options = {}) {
   const sys = `${SYSTEM_PROMPT} Score second-life suitability across candidate applications. Return strict JSON:
 {
   "unit_id": string,
@@ -468,14 +499,14 @@ async function secondLifeSuitability(unit) {
   "summary": string
 }`;
   const usr = `Unit:\n${JSON.stringify(unit, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', application_scores: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 19. Thermal anomaly detector — detection on telemetry window
 // ──────────────────────────────────────────────────────────────
-async function thermalAnomalyDetect(windowContext) {
+async function thermalAnomalyDetect(windowContext, options = {}) {
   const sys = `${SYSTEM_PROMPT} Detect thermal anomalies in a streaming telemetry window. Return strict JSON:
 {
   "window_summary": string,
@@ -492,14 +523,14 @@ async function thermalAnomalyDetect(windowContext) {
   "summary": string
 }`;
   const usr = `Window context:\n${JSON.stringify(windowContext, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', anomalies: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 20. Recycling-stream router — chemistry-aware process pick
 // ──────────────────────────────────────────────────────────────
-async function recyclingStreamRoute(pack) {
+async function recyclingStreamRoute(pack, options = {}) {
   const sys = `${SYSTEM_PROMPT} Route a retired pack to the optimal recycling process given its chemistry. Return strict JSON:
 {
   "pack_id": string,
@@ -512,14 +543,14 @@ async function recyclingStreamRoute(pack) {
   "summary": string
 }`;
   const usr = `Pack:\n${JSON.stringify(pack, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', alternative_streams: [] });
 }
 
 // ──────────────────────────────────────────────────────────────
 // 21. SoC predictor — short-horizon operational SoC forecast
 // ──────────────────────────────────────────────────────────────
-async function socPredict(packContext) {
+async function socPredict(packContext, options = {}) {
   const sys = `${SYSTEM_PROMPT} Predict short-horizon state-of-charge for operational dispatch (distinct from SoH). Return strict JSON:
 {
   "pack_id": string,
@@ -532,7 +563,7 @@ async function socPredict(packContext) {
   "summary": string
 }`;
   const usr = `Pack context:\n${JSON.stringify(packContext, null, 2)}`;
-  const r = await callOpenRouter(sys, usr);
+  const r = await callOpenRouter(sys, usr, options);
   return safeJsonParse(r, { summary: typeof r === 'string' ? r : 'No response', projection: [] });
 }
 

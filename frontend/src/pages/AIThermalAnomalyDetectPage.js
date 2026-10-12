@@ -11,7 +11,7 @@ export default function AIThermalAnomalyDetectPage() {
       inputs={[
         { key: 'window_summary', label: 'Window Summary', type: 'textarea', placeholder: 'Time window, ambient, cell temps, observed anomalies.' },
       ]}
-      run={(v) => aiThermalAnomalyDetect({ window_summary: v.window_summary })}
+      run={(v, requestOptions) => aiThermalAnomalyDetect({ window_summary: v.window_summary }, requestOptions)}
     />
   );
 }

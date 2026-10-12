@@ -12,7 +12,7 @@ export default function AIPpaRevenueForecastPage() {
         { key: 'site_summary', label: 'Site Summary', type: 'textarea', placeholder: 'Site, capacity, duration, SoH.' },
         { key: 'ppa_summary',  label: 'PPA Summary',  type: 'textarea', placeholder: 'Counterparty, structure, term, guarantees.' },
       ]}
-      run={(v) => aiPpaRevenueForecast({ site_summary: v.site_summary, ppa_summary: v.ppa_summary })}
+      run={(v, requestOptions) => aiPpaRevenueForecast({ site_summary: v.site_summary, ppa_summary: v.ppa_summary }, requestOptions)}
     />
   );
 }

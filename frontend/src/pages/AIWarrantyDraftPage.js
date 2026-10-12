@@ -11,7 +11,7 @@ export default function AIWarrantyDraftPage() {
       inputs={[
         { key: 'claim_summary', label: 'Claim Summary', type: 'textarea', placeholder: 'Pack, vendor, defect, contractual context.' },
       ]}
-      run={(v) => aiWarrantyDraft({ claim_summary: v.claim_summary })}
+      run={(v, requestOptions) => aiWarrantyDraft({ claim_summary: v.claim_summary }, requestOptions)}
     />
   );
 }

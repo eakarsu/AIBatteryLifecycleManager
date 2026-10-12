@@ -11,7 +11,7 @@ export default function AIEndOfLifeClassifyPage() {
       inputs={[
         { key: 'pack_summary', label: 'Pack Summary', type: 'textarea', placeholder: 'Chemistry, SoH, cycles, anomalies, customer context.' },
       ]}
-      run={(v) => aiEndOfLifeClassify({ pack_summary: v.pack_summary })}
+      run={(v, requestOptions) => aiEndOfLifeClassify({ pack_summary: v.pack_summary }, requestOptions)}
     />
   );
 }

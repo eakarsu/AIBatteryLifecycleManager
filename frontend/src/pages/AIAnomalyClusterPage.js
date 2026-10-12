@@ -8,8 +8,8 @@ export default function AIAnomalyClusterPage() {
       title="AI · Anomaly Cluster"
       feature="anomaly-cluster"
       subtitle="Group recent alarms into root-cause clusters for triage."
-      inputs={[]}
-      run={() => aiAnomalyCluster({})}
+      inputs={[{ key: 'review_focus', label: 'Triage focus (optional)', type: 'textarea', placeholder: 'Describe the alarm pattern or triage question to prioritize.' }]}
+      run={(values, requestOptions) => aiAnomalyCluster(values, requestOptions)}
     />
   );
 }

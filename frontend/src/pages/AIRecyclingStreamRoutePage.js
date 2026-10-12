@@ -11,7 +11,7 @@ export default function AIRecyclingStreamRoutePage() {
       inputs={[
         { key: 'pack_summary', label: 'Pack Summary', type: 'textarea', placeholder: 'Chemistry, mass, SoH, damage state, customer return path.' },
       ]}
-      run={(v) => aiRecyclingStreamRoute({ pack_summary: v.pack_summary })}
+      run={(v, requestOptions) => aiRecyclingStreamRoute({ pack_summary: v.pack_summary }, requestOptions)}
     />
   );
 }

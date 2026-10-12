@@ -12,7 +12,7 @@ export default function AISocPredictPage() {
         { key: 'context_summary', label: 'Pack / Duty Summary', type: 'textarea', placeholder: 'Current SoC, planned activity, ambient, charge/discharge rate.' },
         { key: 'horizon_minutes', label: 'Horizon (minutes)', type: 'number', defaultValue: 60 },
       ]}
-      run={(v) => aiSocPredict({ context_summary: v.context_summary, horizon_minutes: Number(v.horizon_minutes) || 60 })}
+      run={(v, requestOptions) => aiSocPredict({ context_summary: v.context_summary, horizon_minutes: Number(v.horizon_minutes) || 60 }, requestOptions)}
     />
   );
 }

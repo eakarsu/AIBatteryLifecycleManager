@@ -3,16 +3,62 @@ const router = express.Router();
 const pool = require('../config/database');
 const ai = require('../services/ai');
 
-// Persist every AI result so the frontend history viewer can show it later.
-async function record(feature, input, output) {
+// Every generation is tied to the authenticated actor. Client disconnects abort
+// the upstream provider request so Cancel does not continue paid work or write history.
+router.use((req, res, next) => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  req.once('aborted', abort);
+  res.once('close', () => { if (!res.writableEnded) abort(); });
+  req.aiOptions = { signal: controller.signal };
+  next();
+});
+
+function requestCancelled() {
+  const error = new Error('OpenRouter request cancelled');
+  error.name = 'AbortError';
+  return error;
+}
+
+function ensureActive(req) {
+  if (req.aiOptions?.signal?.aborted || req.aborted) throw requestCancelled();
+}
+
+async function record(req, feature, input, output) {
+  ensureActive(req);
+  const client = await pool.connect();
   try {
-    await pool.query(
-      'INSERT INTO ai_results (feature, input, output) VALUES ($1, $2, $3)',
-      [feature, input || {}, output || {}]
+    await client.query('BEGIN');
+    const actor = (await client.query(
+      'SELECT id, email, role FROM users WHERE id = $1 FOR SHARE',
+      [req.user.id]
+    )).rows[0];
+    if (!actor || actor.email !== req.user.email || actor.role !== req.user.role) {
+      const error = new Error('Your account identity has changed. Please sign in again.');
+      error.status = 401;
+      throw error;
+    }
+    ensureActive(req);
+    await client.query(
+      'INSERT INTO ai_results (user_id, feature, input, output) VALUES ($1, $2, $3, $4)',
+      [actor.id, feature, input || {}, output || {}]
     );
-  } catch (e) {
-    console.warn(`[ai] failed to record ${feature}:`, e.message);
+    ensureActive(req);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
+}
+
+function fail(res, error) {
+  if (error?.name === 'AbortError') {
+    if (!res.headersSent && !res.destroyed) res.status(499).json({ error: 'OpenRouter request cancelled' });
+    return;
+  }
+  if (!res.headersSent) res.status(error?.status || 500).json({ error: error?.message || 'AI request failed' });
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -34,11 +80,11 @@ const SAMPLES = {
   ],
 
   'soh-trend': [
-    { label: 'Fleet snapshot (default)', values: {} },
-    { label: 'Fleet snapshot (default)', values: {} },
-    { label: 'Fleet snapshot (default)', values: {} },
-    { label: 'Fleet snapshot (default)', values: {} },
-    { label: 'Fleet snapshot (default)', values: {} },
+    { label: 'Chemistry cohort comparison', values: { review_focus: 'Compare persisted SoH observations by chemistry cohort. Highlight sample-size limits and missing measurement dates; do not infer unrecorded measurements.' } },
+    { label: 'Low-SoH outlier review', values: { review_focus: 'Identify low-SoH outliers from persisted records and list the evidence needed for qualified engineering review. Do not authorize quarantine release or maintenance.' } },
+    { label: 'Cycle-life planning view', values: { review_focus: 'Summarize persisted fleet trends relevant to cycle-life planning. Separate recorded facts from assumptions and flag missing duty-cycle evidence.' } },
+    { label: 'Warranty evidence scan', values: { review_focus: 'Review persisted SoH trends for potential warranty evidence gaps. Do not state coverage, approval, provider acceptance, or claim success.' } },
+    { label: 'Executive trend summary', values: { review_focus: 'Prepare a concise persisted-data trend summary with uncertainty, data-quality limitations, and human review questions.' } },
   ],
 
   'warranty-draft': [
@@ -148,19 +194,19 @@ const SAMPLES = {
   ],
 
   'fleet-health': [
-    { label: 'Whole-fleet snapshot (default)', values: {} },
-    { label: 'Whole-fleet snapshot (default)', values: {} },
-    { label: 'Whole-fleet snapshot (default)', values: {} },
-    { label: 'Whole-fleet snapshot (default)', values: {} },
-    { label: 'Whole-fleet snapshot (default)', values: {} },
+    { label: 'Critical watchlist review', values: { review_focus: 'Prioritize persisted critical and warning records for a qualified reviewer. Do not infer safe operation or authorize any action.' } },
+    { label: 'Maintenance evidence gaps', values: { review_focus: 'Identify maintenance and inspection evidence gaps in the persisted fleet snapshot. Distinguish recorded facts from missing evidence.' } },
+    { label: 'Second-life planning scan', values: { review_focus: 'Summarize records that may merit second-life evaluation while preserving engineering, consent, certification, and approval gates.' } },
+    { label: 'Warranty exposure overview', values: { review_focus: 'Summarize persisted warranty exposure indicators without claiming coverage, acceptance, reimbursement, or completed service.' } },
+    { label: 'Leadership health brief', values: { review_focus: 'Prepare a concise fleet health brief using only persisted records, with uncertainty and decisions reserved for human owners.' } },
   ],
 
   'anomaly-cluster': [
-    { label: 'Recent open alarms (default)', values: {} },
-    { label: 'Recent open alarms (default)', values: {} },
-    { label: 'Recent open alarms (default)', values: {} },
-    { label: 'Recent open alarms (default)', values: {} },
-    { label: 'Recent open alarms (default)', values: {} },
+    { label: 'Thermal alarm clustering', values: { review_focus: 'Cluster persisted open thermal alarms for triage. Treat root causes as hypotheses and preserve quarantine and qualified-review gates.' } },
+    { label: 'Electrical imbalance clustering', values: { review_focus: 'Prioritize persisted voltage, impedance, and balance alarms. Identify evidence needed before any maintenance decision.' } },
+    { label: 'Site and charger correlation', values: { review_focus: 'Look for persisted site or charger alarm correlations without inventing telemetry or claiming a root cause.' } },
+    { label: 'Potential noise review', values: { review_focus: 'Identify potentially duplicative persisted alarms for human review. Do not suppress, close, or acknowledge any alarm.' } },
+    { label: 'Shift handoff triage', values: { review_focus: 'Prepare a shift-handoff view of persisted open alarms, uncertainties, and escalation questions. Do not claim actions were completed.' } },
   ],
 
   'capacity-fade-explain': [
@@ -263,8 +309,101 @@ const SAMPLES = {
   ],
 };
 
+const FICTIONAL_PREFIX = 'FICTIONAL DRAFT — not live telemetry, evidence, approval, service completion, receipt, payment, delivery or action: ';
+const RECORD_TOKEN = /\b(?:BP|SL|WC|MOD|M|SITE|CUS)-[A-Z0-9-]+\b/g;
+const UNLINKED_LABEL = {
+  BP: 'unlinked fictional pack', SL: 'unlinked fictional second-life unit',
+  WC: 'unlinked fictional warranty claim', MOD: 'unlinked fictional module',
+  M: 'unlinked fictional module', SITE: 'unlinked fictional site', CUS: 'unlinked fictional customer',
+};
+function safeReferenceText(value, knownReferences) {
+  return value.replace(RECORD_TOKEN, (token) => knownReferences.has(token) ? token : UNLINKED_LABEL[token.split('-')[0]] || 'unlinked fictional record');
+}
+function fictionalDemoValue(value, knownReferences) {
+  if (typeof value === 'string') {
+    const text = safeReferenceText(value, knownReferences);
+    return text.startsWith(FICTIONAL_PREFIX) ? text : FICTIONAL_PREFIX + text;
+  }
+  if (Array.isArray(value)) return value.map((item) => fictionalDemoValue(item, knownReferences));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, fictionalDemoValue(item, knownReferences)]));
+  }
+  return value;
+}
+function fictionalSamples(samples, knownReferences) {
+  return samples.map((sample, index) => ({
+    label: safeReferenceText(sample.label || `Planning example ${index + 1}`, knownReferences),
+    values: fictionalDemoValue(sample.values || {}, knownReferences),
+  }));
+}
+async function knownDomainReferences() {
+  const result = await pool.query(`
+    SELECT pack_id AS reference FROM battery_packs WHERE pack_id IS NOT NULL
+    UNION SELECT unit_id FROM second_life_units WHERE unit_id IS NOT NULL
+    UNION SELECT claim_id FROM warranty_claims WHERE claim_id IS NOT NULL
+    UNION SELECT module_id FROM modules WHERE module_id IS NOT NULL
+    UNION SELECT site_id FROM sites WHERE site_id IS NOT NULL
+    UNION SELECT customer_id FROM customers WHERE customer_id IS NOT NULL
+  `);
+  return new Set(result.rows.map((row) => String(row.reference)));
+}
+
+const SOURCE_CATALOGS = {
+  'degradation-forecast': { table: 'battery_packs', reference: 'pack_id', summaryField: 'pack_summary', label: 'Battery pack' },
+  'soh-trend': { table: 'battery_packs', reference: 'pack_id', summaryField: 'review_focus', label: 'Battery pack' },
+  'warranty-draft': { table: 'warranty_claims', reference: 'claim_id', summaryField: 'claim_summary', label: 'Warranty claim' },
+  'second-life-route': { table: 'second_life_units', reference: 'unit_id', summaryField: 'unit_summary', label: 'Second-life unit' },
+  'dispatch-optimize': { table: 'battery_packs', reference: 'pack_id', summaryField: 'pack_summary', label: 'Battery pack' },
+  'thermal-risk': { table: 'battery_packs', reference: 'pack_id', summaryField: 'context_summary', label: 'Battery pack' },
+  'cell-balance-suggest': { table: 'modules', reference: 'module_id', summaryField: 'cells_summary', label: 'Battery module' },
+  'executive-brief': { table: 'battery_packs', reference: 'pack_id', summaryField: 'notes', label: 'Battery pack' },
+  'recycling-quote': { table: 'battery_packs', reference: 'pack_id', summaryField: 'pack_summary', label: 'Battery pack' },
+  'vendor-quality-score': { table: 'battery_packs', reference: 'pack_id', summaryField: 'vendor_summary', label: 'Battery pack' },
+  'customer-soh-report': { table: 'customers', reference: 'customer_id', summaryField: 'customer_summary', label: 'Customer' },
+  'fleet-health': { table: 'battery_packs', reference: 'pack_id', summaryField: 'review_focus', label: 'Battery pack' },
+  'anomaly-cluster': { table: 'alarms', reference: 'alarm_id', summaryField: 'review_focus', label: 'Alarm' },
+  'capacity-fade-explain': { table: 'battery_packs', reference: 'pack_id', summaryField: 'pack_summary', label: 'Battery pack' },
+  'replacement-timeline': { table: 'battery_packs', reference: 'pack_id', summaryField: 'review_focus', label: 'Battery pack' },
+  'ppa-revenue-forecast': { table: 'sites', reference: 'site_id', summaryField: 'site_summary', label: 'Site' },
+  'end-of-life-classify': { table: 'battery_packs', reference: 'pack_id', summaryField: 'pack_summary', label: 'Battery pack' },
+  'second-life-suitability': { table: 'second_life_units', reference: 'unit_id', summaryField: 'unit_summary', label: 'Second-life unit' },
+  'thermal-anomaly-detect': { table: 'battery_packs', reference: 'pack_id', summaryField: 'window_summary', label: 'Battery pack' },
+  'recycling-stream-route': { table: 'battery_packs', reference: 'pack_id', summaryField: 'pack_summary', label: 'Battery pack' },
+  'soc-predict': { table: 'battery_packs', reference: 'pack_id', summaryField: 'context_summary', label: 'Battery pack' },
+  'lifecycle-readiness': { table: 'battery_packs', reference: 'pack_id', summaryField: 'prompt', label: 'Battery pack' },
+};
+const SOURCE_INTERNAL_FIELDS = new Set(['id', 'created_at', 'updated_at']);
+const sourceLabel = (key) => String(key).replace(/_/g, ' ');
+function sourceSummary(catalog, row) {
+  const facts = Object.entries(row)
+    .filter(([key, value]) => !SOURCE_INTERNAL_FIELDS.has(key) && key !== catalog.reference && value !== null && value !== '')
+    .map(([key, value]) => `${sourceLabel(key)}: ${typeof value === 'object' ? JSON.stringify(value) : value}`);
+  return `Persisted ${catalog.label.toLowerCase()} ${row[catalog.reference]}${facts.length ? ` — ${facts.join('; ')}` : ''}`;
+}
+
+// GET /api/ai/sources?feature=<verb>
+// The catalog is authenticated and read-only. It gives mounted AI forms genuine
+// references from the configured native database instead of invented IDs.
+router.get('/sources', async (req, res) => {
+  try {
+    const feature = String(req.query.feature || '');
+    const catalog = SOURCE_CATALOGS[feature];
+    if (!catalog) return res.json({ feature, summaryField: null, sources: [] });
+    const rows = (await pool.query(`SELECT * FROM ${catalog.table} ORDER BY id ASC LIMIT 50`)).rows;
+    res.json({
+      feature,
+      summaryField: catalog.summaryField,
+      sources: rows.filter((row) => row[catalog.reference] != null).map((row) => ({
+        reference: String(row[catalog.reference]),
+        label: `${catalog.label} · ${row[catalog.reference]}`,
+        summary: sourceSummary(catalog, row),
+      })),
+    });
+  } catch (e) { fail(res, e); }
+});
+
 // GET /api/ai/samples?feature=<verb>
-router.get('/samples', (req, res) => {
+router.get('/samples', async (req, res) => {
   try {
     const feature = (req.query.feature || '').toString();
     if (!feature) {
@@ -274,8 +413,9 @@ router.get('/samples', (req, res) => {
     if (!samples) {
       return res.status(404).json({ error: `unknown feature: ${feature}` });
     }
-    res.json({ feature, samples });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const knownReferences = await knownDomainReferences();
+    res.json({ feature, samples: fictionalSamples(samples, knownReferences) });
+  } catch (e) { fail(res, e); }
 });
 
 // GET /api/ai/history?feature=<name>&limit=<n>
@@ -286,17 +426,17 @@ router.get('/history', async (req, res) => {
     let r;
     if (feature) {
       r = await pool.query(
-        'SELECT id, feature, input, output, created_at FROM ai_results WHERE feature = $1 ORDER BY created_at DESC LIMIT $2',
-        [feature, limit]
+        'SELECT id, feature, input, output, created_at FROM ai_results WHERE user_id = $1 AND feature = $2 ORDER BY created_at DESC LIMIT $3',
+        [req.user.id, feature, limit]
       );
     } else {
       r = await pool.query(
-        'SELECT id, feature, input, output, created_at FROM ai_results ORDER BY created_at DESC LIMIT $1',
-        [limit]
+        'SELECT id, feature, input, output, created_at FROM ai_results WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
+        [req.user.id, limit]
       );
     }
     res.json(r.rows);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 1. degradation-forecast ───────────
@@ -305,10 +445,10 @@ router.post('/degradation-forecast', async (req, res) => {
     const { pack_summary, horizon_cycles } = req.body || {};
     const pack = pack_summary || (await pool.query('SELECT * FROM battery_packs ORDER BY id ASC LIMIT 1')).rows[0] || {};
     const horizon = { cycles: horizon_cycles ?? 2000 };
-    const result = await ai.degradationForecast(pack, horizon);
-    await record('degradation-forecast', { pack_summary, horizon_cycles }, result);
+    const result = await ai.degradationForecast(pack, horizon, req.aiOptions);
+    await record(req, 'degradation-forecast', { pack_summary, horizon_cycles }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 2. soh-trend ───────────
@@ -319,10 +459,11 @@ router.post('/soh-trend', async (req, res) => {
       const r = await pool.query('SELECT * FROM battery_packs ORDER BY id ASC LIMIT 30');
       packs = r.rows;
     }
-    const result = await ai.sohTrend(packs);
-    await record('soh-trend', { packs_count: packs.length }, result);
+    const reviewFocus = req.body?.review_focus || '';
+    const result = await ai.sohTrend({ packs, review_focus: reviewFocus }, req.aiOptions);
+    await record(req, 'soh-trend', { packs_count: packs.length, review_focus: reviewFocus }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 3. warranty-draft ───────────
@@ -330,10 +471,10 @@ router.post('/warranty-draft', async (req, res) => {
   try {
     const { claim_summary } = req.body || {};
     if (!claim_summary) return res.status(400).json({ error: 'claim_summary is required' });
-    const result = await ai.warrantyDraft({ claim_summary });
-    await record('warranty-draft', { claim_summary }, result);
+    const result = await ai.warrantyDraft({ claim_summary }, req.aiOptions);
+    await record(req, 'warranty-draft', { claim_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 4. second-life-route ───────────
@@ -341,10 +482,10 @@ router.post('/second-life-route', async (req, res) => {
   try {
     const { unit_summary } = req.body || {};
     if (!unit_summary) return res.status(400).json({ error: 'unit_summary is required' });
-    const result = await ai.secondLifeRoute({ unit_summary });
-    await record('second-life-route', { unit_summary }, result);
+    const result = await ai.secondLifeRoute({ unit_summary }, req.aiOptions);
+    await record(req, 'second-life-route', { unit_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 5. dispatch-optimize ───────────
@@ -352,10 +493,10 @@ router.post('/dispatch-optimize', async (req, res) => {
   try {
     const { pack_summary, market_summary } = req.body || {};
     if (!pack_summary) return res.status(400).json({ error: 'pack_summary is required' });
-    const result = await ai.dispatchOptimize({ pack_summary }, { market_summary });
-    await record('dispatch-optimize', { pack_summary, market_summary }, result);
+    const result = await ai.dispatchOptimize({ pack_summary }, { market_summary }, req.aiOptions);
+    await record(req, 'dispatch-optimize', { pack_summary, market_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 6. thermal-risk ───────────
@@ -363,10 +504,10 @@ router.post('/thermal-risk', async (req, res) => {
   try {
     const { context_summary } = req.body || {};
     if (!context_summary) return res.status(400).json({ error: 'context_summary is required' });
-    const result = await ai.thermalRisk({ context_summary });
-    await record('thermal-risk', { context_summary }, result);
+    const result = await ai.thermalRisk({ context_summary }, req.aiOptions);
+    await record(req, 'thermal-risk', { context_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 7. cell-balance-suggest ───────────
@@ -374,10 +515,10 @@ router.post('/cell-balance-suggest', async (req, res) => {
   try {
     const { cells_summary } = req.body || {};
     if (!cells_summary) return res.status(400).json({ error: 'cells_summary is required' });
-    const result = await ai.cellBalanceSuggest([{ cells_summary }]);
-    await record('cell-balance-suggest', { cells_summary }, result);
+    const result = await ai.cellBalanceSuggest([{ cells_summary }], req.aiOptions);
+    await record(req, 'cell-balance-suggest', { cells_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 8. executive-brief ───────────
@@ -398,11 +539,11 @@ router.post('/executive-brief', async (req, res) => {
       dispatch_schedules: dispatch.rows[0],
       ...(req.body?.notes ? { notes: req.body.notes } : {}),
     };
-    const result = await ai.executiveBrief(snapshot);
+    const result = await ai.executiveBrief(snapshot, req.aiOptions);
     const out = { snapshot, brief: result };
-    await record('executive-brief', { notes: req.body?.notes || null }, out);
+    await record(req, 'executive-brief', { notes: req.body?.notes || null }, out);
     res.json(out);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 9. recycling-quote ───────────
@@ -410,10 +551,10 @@ router.post('/recycling-quote', async (req, res) => {
   try {
     const { pack_summary, vendor_summary } = req.body || {};
     if (!pack_summary) return res.status(400).json({ error: 'pack_summary is required' });
-    const result = await ai.recyclingQuote({ pack_summary }, { vendor_summary });
-    await record('recycling-quote', { pack_summary, vendor_summary }, result);
+    const result = await ai.recyclingQuote({ pack_summary }, { vendor_summary }, req.aiOptions);
+    await record(req, 'recycling-quote', { pack_summary, vendor_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 10. vendor-quality-score ───────────
@@ -421,10 +562,10 @@ router.post('/vendor-quality-score', async (req, res) => {
   try {
     const { vendor_summary } = req.body || {};
     if (!vendor_summary) return res.status(400).json({ error: 'vendor_summary is required' });
-    const result = await ai.vendorQualityScore({ vendor_summary });
-    await record('vendor-quality-score', { vendor_summary }, result);
+    const result = await ai.vendorQualityScore({ vendor_summary }, req.aiOptions);
+    await record(req, 'vendor-quality-score', { vendor_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 11. customer-soh-report ───────────
@@ -433,10 +574,10 @@ router.post('/customer-soh-report', async (req, res) => {
     const { customer_summary } = req.body || {};
     if (!customer_summary) return res.status(400).json({ error: 'customer_summary is required' });
     const packs = (await pool.query('SELECT * FROM battery_packs ORDER BY id ASC LIMIT 12')).rows;
-    const result = await ai.customerSohReport({ customer_summary }, packs);
-    await record('customer-soh-report', { customer_summary }, result);
+    const result = await ai.customerSohReport({ customer_summary }, packs, req.aiOptions);
+    await record(req, 'customer-soh-report', { customer_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 12. fleet-health ───────────
@@ -453,11 +594,12 @@ router.post('/fleet-health', async (req, res) => {
       cells_by_status: cells.rows,
       alarms_summary: alarms.rows,
       warranty_summary: warranty.rows,
+      review_focus: req.body?.review_focus || '',
     };
-    const result = await ai.fleetHealth(snapshot);
-    await record('fleet-health', { packs_count: packs.rows.length }, result);
+    const result = await ai.fleetHealth(snapshot, req.aiOptions);
+    await record(req, 'fleet-health', { packs_count: packs.rows.length, review_focus: snapshot.review_focus }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 13. anomaly-cluster ───────────
@@ -468,10 +610,11 @@ router.post('/anomaly-cluster', async (req, res) => {
       const r = await pool.query("SELECT * FROM alarms WHERE status='open' ORDER BY opened_at DESC LIMIT 30");
       alarms = r.rows;
     }
-    const result = await ai.anomalyCluster(alarms);
-    await record('anomaly-cluster', { alarms_count: alarms.length }, result);
+    const reviewFocus = req.body?.review_focus || '';
+    const result = await ai.anomalyCluster({ alarms, review_focus: reviewFocus }, req.aiOptions);
+    await record(req, 'anomaly-cluster', { alarms_count: alarms.length, review_focus: reviewFocus }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 14. capacity-fade-explain ───────────
@@ -479,21 +622,22 @@ router.post('/capacity-fade-explain', async (req, res) => {
   try {
     const { pack_summary, history_summary } = req.body || {};
     if (!pack_summary) return res.status(400).json({ error: 'pack_summary is required' });
-    const result = await ai.capacityFadeExplain({ pack_summary }, [{ history_summary }]);
-    await record('capacity-fade-explain', { pack_summary, history_summary }, result);
+    const result = await ai.capacityFadeExplain({ pack_summary }, [{ history_summary }], req.aiOptions);
+    await record(req, 'capacity-fade-explain', { pack_summary, history_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 15. replacement-timeline ───────────
 router.post('/replacement-timeline', async (req, res) => {
   try {
     const horizonMonths = Number(req.body?.horizon_months) || 36;
+    const reviewFocus = String(req.body?.review_focus || '');
     const packs = (await pool.query('SELECT * FROM battery_packs ORDER BY id ASC LIMIT 30')).rows;
-    const result = await ai.replacementTimeline(packs.map((p) => ({ ...p, _horizon_months: horizonMonths })));
-    await record('replacement-timeline', { horizon_months: horizonMonths, packs_count: packs.length }, result);
+    const result = await ai.replacementTimeline(packs.map((p) => ({ ...p, _horizon_months: horizonMonths, _review_focus: reviewFocus })), req.aiOptions);
+    await record(req, 'replacement-timeline', { horizon_months: horizonMonths, review_focus: reviewFocus, packs_count: packs.length }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 16. ppa-revenue-forecast ───────────
@@ -501,10 +645,10 @@ router.post('/ppa-revenue-forecast', async (req, res) => {
   try {
     const { site_summary, ppa_summary } = req.body || {};
     if (!site_summary) return res.status(400).json({ error: 'site_summary is required' });
-    const result = await ai.ppaRevenueForecast({ site_summary }, { ppa_summary });
-    await record('ppa-revenue-forecast', { site_summary, ppa_summary }, result);
+    const result = await ai.ppaRevenueForecast({ site_summary }, { ppa_summary }, req.aiOptions);
+    await record(req, 'ppa-revenue-forecast', { site_summary, ppa_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 17. end-of-life-classify ───────────
@@ -512,10 +656,10 @@ router.post('/end-of-life-classify', async (req, res) => {
   try {
     const { pack_summary } = req.body || {};
     if (!pack_summary) return res.status(400).json({ error: 'pack_summary is required' });
-    const result = await ai.endOfLifeClassify({ pack_summary });
-    await record('end-of-life-classify', { pack_summary }, result);
+    const result = await ai.endOfLifeClassify({ pack_summary }, req.aiOptions);
+    await record(req, 'end-of-life-classify', { pack_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 18. second-life-suitability ───────────
@@ -523,10 +667,10 @@ router.post('/second-life-suitability', async (req, res) => {
   try {
     const { unit_summary } = req.body || {};
     if (!unit_summary) return res.status(400).json({ error: 'unit_summary is required' });
-    const result = await ai.secondLifeSuitability({ unit_summary });
-    await record('second-life-suitability', { unit_summary }, result);
+    const result = await ai.secondLifeSuitability({ unit_summary }, req.aiOptions);
+    await record(req, 'second-life-suitability', { unit_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 19. thermal-anomaly-detect ───────────
@@ -534,10 +678,10 @@ router.post('/thermal-anomaly-detect', async (req, res) => {
   try {
     const { window_summary } = req.body || {};
     if (!window_summary) return res.status(400).json({ error: 'window_summary is required' });
-    const result = await ai.thermalAnomalyDetect({ window_summary });
-    await record('thermal-anomaly-detect', { window_summary }, result);
+    const result = await ai.thermalAnomalyDetect({ window_summary }, req.aiOptions);
+    await record(req, 'thermal-anomaly-detect', { window_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 20. recycling-stream-route ───────────
@@ -545,10 +689,10 @@ router.post('/recycling-stream-route', async (req, res) => {
   try {
     const { pack_summary } = req.body || {};
     if (!pack_summary) return res.status(400).json({ error: 'pack_summary is required' });
-    const result = await ai.recyclingStreamRoute({ pack_summary });
-    await record('recycling-stream-route', { pack_summary }, result);
+    const result = await ai.recyclingStreamRoute({ pack_summary }, req.aiOptions);
+    await record(req, 'recycling-stream-route', { pack_summary }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 // ─────────── 21. soc-predict ───────────
@@ -556,10 +700,10 @@ router.post('/soc-predict', async (req, res) => {
   try {
     const { context_summary, horizon_minutes } = req.body || {};
     if (!context_summary) return res.status(400).json({ error: 'context_summary is required' });
-    const result = await ai.socPredict({ context_summary, horizon_minutes: horizon_minutes ?? 60 });
-    await record('soc-predict', { context_summary, horizon_minutes }, result);
+    const result = await ai.socPredict({ context_summary, horizon_minutes: horizon_minutes ?? 60 }, req.aiOptions);
+    await record(req, 'soc-predict', { context_summary, horizon_minutes }, result);
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { fail(res, e); }
 });
 
 module.exports = router;

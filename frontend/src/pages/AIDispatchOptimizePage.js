@@ -12,7 +12,7 @@ export default function AIDispatchOptimizePage() {
         { key: 'pack_summary',   label: 'Pack Summary',   type: 'textarea', placeholder: 'Capacity, power, duration, SoH, cycle budget.' },
         { key: 'market_summary', label: 'Market Summary', type: 'textarea', placeholder: 'Market, prices, AS opportunity, constraints.' },
       ]}
-      run={(v) => aiDispatchOptimize({ pack_summary: v.pack_summary, market_summary: v.market_summary })}
+      run={(v, requestOptions) => aiDispatchOptimize({ pack_summary: v.pack_summary, market_summary: v.market_summary }, requestOptions)}
     />
   );
 }

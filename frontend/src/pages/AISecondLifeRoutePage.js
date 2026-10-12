@@ -11,7 +11,7 @@ export default function AISecondLifeRoutePage() {
       inputs={[
         { key: 'unit_summary', label: 'Unit Summary', type: 'textarea', placeholder: 'Source pack, chemistry, SoH, cycles, mechanical condition.' },
       ]}
-      run={(v) => aiSecondLifeRoute({ unit_summary: v.unit_summary })}
+      run={(v, requestOptions) => aiSecondLifeRoute({ unit_summary: v.unit_summary }, requestOptions)}
     />
   );
 }

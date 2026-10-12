@@ -1,26 +1,57 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, setToken, setStoredUser } from '../services/api';
+import { login, loginDemo, setToken, setStoredUser } from '../services/api';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@batterylife.io');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const request = useRef(null);
+  const locked = useRef(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  useEffect(() => () => request.current?.abort(), []);
+
+  const acceptSession = ({ token, user } = {}) => {
+    if (!token || !user?.id || !user?.email || !user?.role) {
+      throw new Error('Authentication returned an invalid session');
+    }
+    setToken(token);
+    setStoredUser(user);
+    navigate('/', { replace: true });
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (locked.current) return;
+    locked.current = true;
     setError(null);
     setLoading(true);
     try {
-      const { token, user } = await login(email, password);
-      setToken(token);
-      setStoredUser(user);
-      navigate('/', { replace: true });
+      acceptSession(await login(email, password));
     } catch (err) {
       setError(err.message);
     } finally {
+      locked.current = false;
+      setLoading(false);
+    }
+  };
+
+  const handleDemo = async () => {
+    if (locked.current) return;
+    locked.current = true;
+    const controller = new AbortController();
+    request.current = controller;
+    setError(null);
+    setLoading(true);
+    try {
+      acceptSession(await loginDemo({ signal: controller.signal }));
+    } catch (err) {
+      if (err.name !== 'AbortError') setError(err.message);
+    } finally {
+      if (request.current === controller) request.current = null;
+      locked.current = false;
       setLoading(false);
     }
   };
@@ -32,44 +63,45 @@ export default function LoginPage() {
         <p className="login-sub">BESS + EV Second-Life Hub</p>
 
         <div className="form-group">
-          <label>Email</label>
+          <label htmlFor="login-email">Email</label>
           <input
+            id="login-email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(event) => setEmail(event.target.value)}
             autoComplete="username"
             required
           />
         </div>
         <div className="form-group">
-          <label>Password</label>
+          <label htmlFor="login-password">Password</label>
           <input
+            id="login-password"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
             required
           />
         </div>
 
-        {error && <div className="ai-error" style={{ marginBottom: 12 }}>{error}</div>}
+        {error && <div className="ai-error" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
 
         <button
           type="button"
-          onClick={() => { setEmail(process.env.REACT_APP_DEMO_EMAIL || ''); setPassword(process.env.REACT_APP_DEMO_PASSWORD || ''); }}
-          disabled={!process.env.REACT_APP_DEMO_EMAIL || !process.env.REACT_APP_DEMO_PASSWORD}
-          aria-label="Auto Fill Demo Credentials"
-          style={{ width: '100%', marginBottom: '12px', padding: '10px 14px', borderRadius: '8px', border: '1px solid currentColor', background: 'transparent', cursor: 'pointer' }}
+          className="btn secondary"
+          onClick={handleDemo}
+          disabled={loading}
+          aria-label="Log In as Demo"
+          style={{ width: '100%', marginBottom: '12px' }}
         >
-          Auto Fill Demo Credentials
+          {loading ? 'Authenticating…' : 'Log In as Demo'}
         </button>
         <button className="btn" type="submit" disabled={loading} style={{ width: '100%' }}>
           {loading ? <><span className="spinner" />Authenticating...</> : 'Sign In'}
         </button>
 
-        <p className="login-hint">
-          Demo: <code>admin@batterylife.io</code> / <code>admin123</code>
-        </p>
+        <p className="login-hint">Demo access uses an existing fictional actor and never exposes its password.</p>
       </form>
     </div>
   );

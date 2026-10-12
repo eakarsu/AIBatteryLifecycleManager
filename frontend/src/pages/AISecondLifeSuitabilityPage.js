@@ -11,7 +11,7 @@ export default function AISecondLifeSuitabilityPage() {
       inputs={[
         { key: 'unit_summary', label: 'Unit Summary', type: 'textarea', placeholder: 'Source pack, chemistry, SoH, cycles, condition.' },
       ]}
-      run={(v) => aiSecondLifeSuitability({ unit_summary: v.unit_summary })}
+      run={(v, requestOptions) => aiSecondLifeSuitability({ unit_summary: v.unit_summary }, requestOptions)}
     />
   );
 }

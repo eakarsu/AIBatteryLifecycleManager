@@ -16,6 +16,19 @@ async function findDbUser(email, password) {
   return { id: u.id, email: u.email, name: u.name, role: u.role };
 }
 
+async function findExistingDemoUser() {
+  const email = String(process.env.DEMO_LOGIN_EMAIL || 'admin@batterylife.invalid').trim().toLowerCase();
+  const password = process.env.SEED_DEMO_PASSWORD || '';
+  // Demo access is limited to a configured seeded .invalid identity unless the
+  // host explicitly enables another address. No account or secret is exposed.
+  if (!password || (!email.endsWith('.invalid') && process.env.DEMO_LOGIN_ENABLED !== '1')) return null;
+  return findDbUser(email, password);
+}
+
+function sessionFor(user) {
+  return { token: jwt.sign(user, JWT_SECRET, { expiresIn: '24h' }), user };
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
@@ -30,11 +43,24 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, user });
+    res.json(sessionFor(user));
   } catch (e) {
     console.error('Login error:', e);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/demo
+// Uses one existing fictional demo actor and verifies its stored hash against
+// the configured seed password. It never creates users or returns a password.
+router.post('/demo', async (_req, res) => {
+  try {
+    const user = await findExistingDemoUser();
+    if (!user) return res.status(503).json({ error: 'Demo login is unavailable on this host' });
+    res.json(sessionFor(user));
+  } catch (e) {
+    console.error('Demo login error:', e);
+    res.status(503).json({ error: 'Demo login is temporarily unavailable' });
   }
 });
 

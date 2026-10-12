@@ -11,7 +11,7 @@ export default function AIVendorQualityScorePage() {
       inputs={[
         { key: 'vendor_summary', label: 'Vendor Summary', type: 'textarea', placeholder: 'Vendor, packs deployed, avg SoH, warranty count, thermal events, OTD.' },
       ]}
-      run={(v) => aiVendorQualityScore({ vendor_summary: v.vendor_summary })}
+      run={(v, requestOptions) => aiVendorQualityScore({ vendor_summary: v.vendor_summary }, requestOptions)}
     />
   );
 }

@@ -10,8 +10,9 @@ export default function AIReplacementTimelinePage() {
       subtitle="Build a replacement timeline for the fleet with cost and second-life recovery."
       inputs={[
         { key: 'horizon_months', label: 'Horizon (months)', type: 'number', defaultValue: 36 },
+        { key: 'review_focus', label: 'Planning focus (optional)', type: 'textarea', placeholder: 'Describe the persisted pack and replacement planning question to prioritize.' },
       ]}
-      run={(v) => aiReplacementTimeline({ horizon_months: Number(v.horizon_months) || 36 })}
+      run={(v, requestOptions) => aiReplacementTimeline({ horizon_months: Number(v.horizon_months) || 36, review_focus: v.review_focus }, requestOptions)}
     />
   );
 }

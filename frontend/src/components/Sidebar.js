@@ -73,6 +73,7 @@ const AI_MAINTENANCE = [
 ];
 
 const AI_REPORTING = [
+  { to: '/ai/lifecycle-readiness', label: 'AI · Lifecycle Readiness' },
   { to: '/ai/executive-brief',       label: 'AI · Executive Brief' },
   { to: '/ai/fleet-health',          label: 'AI · Fleet Health' },
   { to: '/ai/customer-soh-report',   label: 'AI · Customer SoH Report' },
