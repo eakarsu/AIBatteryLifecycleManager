@@ -31,6 +31,7 @@ export default function CrudPage({ title, subtitle, api, fields, statusKey, allo
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({});
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState(null);
 
@@ -86,16 +87,19 @@ export default function CrudPage({ title, subtitle, api, fields, statusKey, allo
 
   const setField = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
 
+  const statusField = fields.find((f) => f.key === statusKey);
   const filteredRows = useMemo(() => {
+    let base = rows;
+    if (statusFilter) base = base.filter((row) => String(row[statusKey] ?? '') === statusFilter);
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) =>
+    if (!q) return base;
+    return base.filter((row) =>
       fields.some((f) => {
         const v = row[f.key];
         return v != null && String(v).toLowerCase().includes(q);
       })
     );
-  }, [rows, search, fields]);
+  }, [rows, search, fields, statusFilter, statusKey]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -124,6 +128,13 @@ export default function CrudPage({ title, subtitle, api, fields, statusKey, allo
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportJson = () => {
+    const blob = new Blob([JSON.stringify(filteredRows, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    const safeTitle = (title || 'export').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    a.href = url; a.download = `${safeTitle}_export.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
   const handleImportFile = async (file) => {
@@ -194,6 +205,9 @@ export default function CrudPage({ title, subtitle, api, fields, statusKey, allo
           <button className="btn secondary" onClick={handleExportCsv} disabled={filteredRows.length === 0}>
             Export CSV
           </button>
+          <button className="btn secondary" onClick={handleExportJson} disabled={filteredRows.length === 0}>
+            Export JSON
+          </button>
           {writer && (
             <>
               <button
@@ -216,6 +230,7 @@ export default function CrudPage({ title, subtitle, api, fields, statusKey, allo
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        {statusField && Array.isArray(statusField.options) && (<label>Status <select aria-label="Status filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All statuses</option>{statusField.options.map((o) => <option key={o} value={o}>{o}</option>)}</select></label>)}
         <div className="toolbar-meta">
           {filteredRows.length} record{filteredRows.length === 1 ? '' : 's'}
           {search && rows.length !== filteredRows.length && ` (filtered from ${rows.length})`}

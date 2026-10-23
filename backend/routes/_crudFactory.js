@@ -40,7 +40,28 @@ function buildCrud({ table, fields, idPrefix = '', webhookPrefix = null }) {
   router.get('/', async (req, res) => {
     try {
       const r = await pool.query(`SELECT * FROM ${table} ORDER BY id DESC`);
-      res.json(r.rows);
+      let rows = r.rows;
+      const q = String(req.query.q || req.query.search || '').trim().toLowerCase();
+      if (q) rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(q));
+      if (req.query.status) rows = rows.filter((row) => String(row.status ?? '') === String(req.query.status));
+      res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.get('/export', async (req, res) => {
+    try {
+      const r = await pool.query(`SELECT * FROM ${table} ORDER BY id DESC`);
+      let rows = r.rows;
+      const q = String(req.query.q || req.query.search || '').trim().toLowerCase();
+      if (q) rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(q));
+      if (req.query.status) rows = rows.filter((row) => String(row.status ?? '') === String(req.query.status));
+      if (String(req.query.format || 'json').toLowerCase() === 'csv') {
+        const headers = [...new Set(rows.flatMap((row) => Object.keys(row || {})))];
+        const esc = (v) => { const s = v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        res.setHeader('Content-Type', 'text/csv'); res.setHeader('Content-Disposition', `attachment; filename="${table}.csv"`);
+        return res.send([headers.join(','), ...rows.map((row) => headers.map((h) => esc(row[h])).join(','))].join('\n') + (rows.length ? '\n' : ''));
+      }
+      res.setHeader('Content-Disposition', `attachment; filename="${table}.json"`); return res.json(rows);
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 

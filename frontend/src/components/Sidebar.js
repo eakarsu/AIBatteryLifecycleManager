@@ -91,6 +91,8 @@ export default function Sidebar() {
       </div>
 
       <NavLink to="/" end>Overview</NavLink>
+      <NavLink to="/tasks">Tasks</NavLink>
+      <NavLink to="/ai/feature-pack">AI · Record Insights</NavLink>
 
       <div className="sidebar-group-label">Assets</div>
       {ASSETS.map((l) => (

@@ -59,6 +59,13 @@ app.use('/api/audit-log',           require('./routes/auditLog'));
 
 // AI routes (16 sub-endpoints + history under /api/ai)
 app.use('/api/ai', require('./routes/ai'));
+app.use('/api/tasks', require('./routes/featurePack27b').createTasksRouter({ pool }));
+const featurePackAiLoaders = {
+  'fleet-health-summary': async (pool) => (await pool.query('SELECT * FROM battery_packs ORDER BY id DESC')).rows,
+  'replacement-priority': async (pool) => ({ packs: (await pool.query('SELECT * FROM battery_packs ORDER BY id DESC')).rows, sohReports: (await pool.query('SELECT * FROM soh_reports ORDER BY id DESC')).rows }),
+  'second-life-candidates': async (pool) => ({ packs: (await pool.query('SELECT * FROM battery_packs ORDER BY id DESC')).rows, sohReports: (await pool.query('SELECT * FROM soh_reports ORDER BY id DESC')).rows }),
+};
+app.use('/api/ai/feature-pack', require('./routes/featurePack28a').createFeaturePackAiRouter({ pool, loaders: featurePackAiLoaders }));
 
 // Cross-cutting
 app.use('/api/notifications', require('./routes/notifications'));
